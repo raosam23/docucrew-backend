@@ -1,0 +1,26 @@
+# Python cache & build files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables & secrets (CRITICAL: Do not commit API keys!)
+.env
+.env.*
+!.env.example
+
+# Vector Database (Local ChromaDB storage)
+chroma_data/
+
+# OS specific files
+.DS_Store
+Thumbs.db
