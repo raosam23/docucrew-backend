@@ -1,20 +1,19 @@
 """initial migration
 
-Revision ID: 584b3bc372cc
+Revision ID: ea8c7b511652
 Revises: 
-Create Date: 2026-06-10 22:07:47.728859
+Create Date: 2026-06-13 22:23:30.264936
 
 """
 from typing import Sequence, Union
 
-import sqlmodel
-
 from alembic import op
 import sqlalchemy as sa
+import sqlmodel
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '584b3bc372cc'
+revision: str = 'ea8c7b511652'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -48,8 +47,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('collection_id', sa.Uuid(), nullable=False),
     sa.Column('filename', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('file_type', sa.Enum('PDF', 'DOCX', 'TXT', 'MD', name='filetype'), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'PROCESSING', 'READY', 'FAILED', name='documentstatus'), nullable=False),
+    sa.Column('file_type', sa.Enum('pdf', 'docx', 'txt', 'md', name='filetype'), nullable=False),
+    sa.Column('status', sa.Enum('pending', 'processing', 'ready', 'failed', name='documentstatus'), nullable=False),
     sa.Column('chunk_count', sa.Integer(), nullable=True),
     sa.Column('error_message', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
