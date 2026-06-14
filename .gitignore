@@ -24,3 +24,6 @@ chroma_data/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# pdf file uploads
+uploads/*
