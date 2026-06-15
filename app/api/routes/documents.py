@@ -12,11 +12,17 @@ from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus, FileType
 from app.models.user import User
 from app.schemas.document import DocumentResponse
+from app.services.chroma_service import delete_chunks_by_doc_id
 
 router = APIRouter()
 
 @router.post("/{collection_id}/documents/", response_model=List[DocumentResponse])
-async def upload_documents(collection_id: UUID, files: List[UploadFile] = File(...), user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+async def upload_documents(
+    collection_id: UUID,
+    files: List[UploadFile] = File(...),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
     """Endpoint that uploads multiple documents to a collection"""
     response = await session.execute(select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id))
     collection = response.scalar_one_or_none()
@@ -72,5 +78,6 @@ async def delete_document_by_ids(collection_id: UUID, document_id: UUID, user: U
     file_path = f"./uploads/{collection_id}/{document.filename}"
     if os.path.exists(file_path):
         os.remove(file_path)
+    delete_chunks_by_doc_id(collection.chroma_collection_id, str(document.id))
     await session.delete(document)
     await session.commit()
