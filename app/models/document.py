@@ -1,10 +1,13 @@
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, Enum as SAEnum
-from sqlalchemy.sql import func
 from datetime import datetime
-from uuid import UUID, uuid4
-from typing import Optional
 from enum import Enum
+from typing import Optional
+from uuid import UUID, uuid4
+
+from sqlalchemy import Column, DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.sql import func
+from sqlmodel import Field, SQLModel
+
 
 class FileType(str, Enum):
     PDF = "pdf"

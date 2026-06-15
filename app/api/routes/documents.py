@@ -1,15 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+import os
 from typing import List
 from uuid import UUID
-from sqlmodel import select
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.database import get_session
+from sqlmodel import select
+
 from app.core.security import get_current_user
-from app.models.user import User
-from app.models.document import Document, FileType, DocumentStatus
+from app.db.database import get_session
 from app.models.collection import Collection
+from app.models.document import Document, DocumentStatus, FileType
+from app.models.user import User
 from app.schemas.document import DocumentResponse
-import os
 
 router = APIRouter()
 

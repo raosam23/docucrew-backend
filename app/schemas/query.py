@@ -1,7 +1,7 @@
+from typing import List, Optional
 from uuid import UUID
-from pydantic import ConfigDict
-from pydantic import BaseModel, Field
-from typing import Optional, List
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Citations(BaseModel):

@@ -1,9 +1,10 @@
-from pydantic import ConfigDict
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
-from app.models.document import FileType, DocumentStatus
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.document import DocumentStatus, FileType
 
 
 class DocumentResponse(BaseModel):

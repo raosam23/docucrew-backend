@@ -1,8 +1,10 @@
-from logging.config import fileConfig
-from sqlalchemy import pool
-from alembic import context
 import asyncio
+from logging.config import fileConfig
+
+from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 config = context.config
 
@@ -10,12 +12,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
-from app.core.config import settings
-from app.models.user import User
-from app.models.collection import Collection
-from app.models.document import Document
-from app.models.query_history import QueryHistory
 from sqlmodel import SQLModel
+
+from app.core.config import settings
 
 target_metadata = SQLModel.metadata
 

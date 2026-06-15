@@ -27,3 +27,6 @@ Thumbs.db
 
 # pdf file uploads
 uploads/*
+
+# vs code files
+.vscode/

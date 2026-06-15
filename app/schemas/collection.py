@@ -1,8 +1,9 @@
-from pydantic import ConfigDict
 from datetime import datetime
-from uuid import UUID
 from typing import Optional
-from pydantic import BaseModel, Field
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class CollectionCreate(BaseModel):
     """Schema of what the user sends to create a collection"""

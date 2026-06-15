@@ -1,7 +1,9 @@
-from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
-from uuid import UUID
 from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class RegisterRequest(BaseModel):
     """Schema of what the user sends while registering"""

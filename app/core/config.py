@@ -1,6 +1,7 @@
-from pydantic_settings import SettingsConfigDict
-from pydantic_settings import BaseSettings
 from typing import List
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "DocuCrew"

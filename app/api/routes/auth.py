@@ -1,12 +1,14 @@
-from fastapi import HTTPException
-from sqlmodel import select
-from fastapi import Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, status
-from app.schemas.auth import RegisterRequest, UserResponse, LoginRequest, LoginResponse
+from sqlmodel import select
+
+from app.core.security import (create_access_token, get_current_user,
+                               hash_password, verify_password)
 from app.db.database import get_session
 from app.models.user import User
-from app.core.security import hash_password, verify_password, get_current_user, create_access_token
+from app.schemas.auth import (LoginRequest, LoginResponse, RegisterRequest,
+                              UserResponse)
+
 router = APIRouter()
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, response_model=UserResponse)

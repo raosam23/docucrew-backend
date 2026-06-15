@@ -1,9 +1,11 @@
-from typing import Optional
-from sqlmodel import SQLModel, Field
-from sqlalchemy.sql import func
-from sqlalchemy import Column, DateTime
-from uuid import UUID, uuid4
 from datetime import datetime
+from typing import Optional
+from uuid import UUID, uuid4
+
+from sqlalchemy import Column, DateTime
+from sqlalchemy.sql import func
+from sqlmodel import Field, SQLModel
+
 
 class Collection(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)

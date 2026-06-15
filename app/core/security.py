@@ -1,17 +1,16 @@
-from app.models.user import User
-from sqlmodel import select
-from fastapi import status
-from typing import Any, Dict
-import bcrypt
-from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
-from fastapi import Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Any, Dict
+
+import bcrypt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from app.core.config import settings
 from app.db.database import get_session
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.user import User
 
 http_bearer = HTTPBearer()
 
