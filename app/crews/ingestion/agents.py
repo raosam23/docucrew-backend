@@ -1,7 +1,7 @@
 from crewai import Agent
 
-from app.crews.tools import ChromaStoreTool, FileReaderTool
 from app.core.config import settings
+from app.crews.tools import ChromaStoreTool, FileReaderTool
 
 document_parser_agent = Agent(
     role="Document Parser",

@@ -7,13 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.core.security import get_current_user
+from app.crews.ingestion.crew import ingestion_crew
 from app.db.database import get_session
 from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus, FileType
 from app.models.user import User
 from app.schemas.document import DocumentResponse
 from app.services.chroma_service import delete_chunks_by_doc_id
-from app.crews.ingestion.crew import ingestion_crew
 
 router = APIRouter()
 
@@ -49,8 +49,6 @@ async def upload_documents(
         session.add(document)
         all_documents.append(document)
     await session.commit()
-    for document in all_documents:
-        await session.refresh(document)
     ingestion_crew.kickoff(inputs={
         "files": [
             {"doc_id": str(doc.id), "file_path": f"./uploads/{collection_id}/{doc.filename}"}
@@ -58,6 +56,13 @@ async def upload_documents(
         ],
         "collection_id": collection.chroma_collection_id,
     })
+    for document in all_documents:
+        document.status = DocumentStatus.READY
+        session.add(document)
+    await session.commit()
+    for document in all_documents:
+        await session.refresh(document)
+    
     return [DocumentResponse.model_validate(document) for document in all_documents]
 
 @router.get("/{collection_id}/documents", response_model=List[DocumentResponse], status_code=status.HTTP_200_OK)

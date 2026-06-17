@@ -38,7 +38,10 @@ def search(collection_id: str, query: str, top_k: int = 8) -> List[Dict[str, Any
 
 def delete_collection(collection_id: str) -> None:
     """Delete a ChromaDB collection"""
-    chroma_client.delete_collection(collection_id)
+    try:
+        chroma_client.delete_collection(collection_id)
+    except Exception:
+        pass
 
 def delete_chunks_by_doc_id(collection_id: str, doc_id: str) -> None:
     """Delete chunks from a ChromaDB collection by doc_id"""

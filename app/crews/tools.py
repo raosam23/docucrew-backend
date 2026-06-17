@@ -1,9 +1,11 @@
-from typing import List, Type, Dict, Any
+from typing import Any, Dict, List, Type
+
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from app.services.chroma_service import add_chunks
 from app.services.file_service import parse_file
+
 
 class ChromaStoreToolArgs(BaseModel):
     collection_id: str = Field(description="The ID of the collection to store the text chunk in.")
