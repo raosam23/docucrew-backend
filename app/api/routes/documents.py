@@ -13,6 +13,7 @@ from app.models.document import Document, DocumentStatus, FileType
 from app.models.user import User
 from app.schemas.document import DocumentResponse
 from app.services.chroma_service import delete_chunks_by_doc_id
+from app.crews.ingestion.crew import ingestion_crew
 
 router = APIRouter()
 
@@ -50,6 +51,13 @@ async def upload_documents(
     await session.commit()
     for document in all_documents:
         await session.refresh(document)
+    ingestion_crew.kickoff(inputs={
+        "files": [
+            {"doc_id": str(doc.id), "file_path": f"./uploads/{collection_id}/{doc.filename}"}
+            for doc in all_documents
+        ],
+        "collection_id": collection.chroma_collection_id,
+    })
     return [DocumentResponse.model_validate(document) for document in all_documents]
 
 @router.get("/{collection_id}/documents", response_model=List[DocumentResponse], status_code=status.HTTP_200_OK)
