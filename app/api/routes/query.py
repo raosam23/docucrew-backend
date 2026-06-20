@@ -1,16 +1,18 @@
+from typing import List
 from uuid import UUID
-from fastapi import APIRouter, Depends, status, HTTPException
-from app.core.security import get_current_user
-from app.db.database import get_session
-from app.models.document import Document, DocumentStatus
-from app.models.user import User
-from app.schemas.query import QueryRequest, QueryResponse, QueryHistoryResponse
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from app.models.collection import Collection
-from app.models.query_history import QueryHistory 
-from typing import List
+
+from app.core.security import get_current_user
 from app.crews.query.crew import query_crew
+from app.db.database import get_session
+from app.models.collection import Collection
+from app.models.document import Document, DocumentStatus
+from app.models.query_history import QueryHistory
+from app.models.user import User
+from app.schemas.query import QueryHistoryResponse, QueryRequest, QueryResponse
 
 router = APIRouter()
 

@@ -1,11 +1,7 @@
 from crewai import Task
 
-from app.crews.query.agents import (
-    retriever_agent,
-    cross_reference_agent,
-    synthesizer_agent,
-    gap_analyst_agent,
-)
+from app.crews.query.agents import (cross_reference_agent, gap_analyst_agent,
+                                    retriever_agent, synthesizer_agent)
 
 retrieve_task = Task(
     description="Retrieve top-k relevant chunks from Chroma DB collection {collection_id} for the user question: {question}",

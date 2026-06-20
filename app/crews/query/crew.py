@@ -1,20 +1,10 @@
-from crewai import Crew, Process, LLM
-
-from app.crews.query.agents import (
-    retriever_agent,
-    cross_reference_agent,
-    synthesizer_agent,
-    gap_analyst_agent
-)
+from crewai import LLM, Crew, Process
 
 from app.core.config import settings
-
-from app.crews.query.tasks import (
-    retrieve_task,
-    cross_reference_task,
-    synthesize_task,
-    gap_analyst_task
-)
+from app.crews.query.agents import (cross_reference_agent, gap_analyst_agent,
+                                    retriever_agent, synthesizer_agent)
+from app.crews.query.tasks import (cross_reference_task, gap_analyst_task,
+                                   retrieve_task, synthesize_task)
 
 query_crew = Crew(
     agents=[retriever_agent, cross_reference_agent, synthesizer_agent, gap_analyst_agent],

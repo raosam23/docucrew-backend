@@ -15,6 +15,10 @@ if config.config_file_name is not None:
 from sqlmodel import SQLModel
 
 from app.core.config import settings
+from app.models.collection import Collection  # noqa: F401
+from app.models.document import Document  # noqa: F401
+from app.models.query_history import QueryHistory  # noqa: F401
+from app.models.user import User  # noqa: F401
 
 target_metadata = SQLModel.metadata
 
