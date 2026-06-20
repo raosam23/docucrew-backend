@@ -2,6 +2,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status, HTTPException
 from app.core.security import get_current_user
 from app.db.database import get_session
+from app.models.document import Document, DocumentStatus
 from app.models.user import User
 from app.schemas.query import QueryRequest, QueryResponse, QueryHistoryResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,12 @@ async def query_collection(collection_id: UUID, request: QueryRequest, user: Use
     collections = response.scalar_one_or_none()
     if not collections:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collections not found")
+    documents_response = await session.execute(select(Document).where(Document.collection_id == collection_id))
+    documents = documents_response.scalars().all()
+    for document in documents:
+        if document.status != DocumentStatus.READY:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Document '{document.filename}' is not ready (status: {document.status})")
+
     response = query_crew.kickoff(inputs={"question": request.question, "collection_id": str(collection_id)})
 
     history = QueryHistory(

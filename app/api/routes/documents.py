@@ -49,16 +49,26 @@ async def upload_documents(
         session.add(document)
         all_documents.append(document)
     await session.commit()
-    ingestion_crew.kickoff(inputs={
-        "files": [
-            {"doc_id": str(doc.id), "file_path": f"./uploads/{collection_id}/{doc.filename}"}
-            for doc in all_documents
-        ],
-        "collection_id": collection.chroma_collection_id,
-    })
     for document in all_documents:
-        document.status = DocumentStatus.READY
+        document.status = DocumentStatus.PROCESSING
         session.add(document)
+    await session.commit()
+    try:
+        ingestion_crew.kickoff(inputs={
+            "files": [
+                {"doc_id": str(doc.id), "file_path": f"./uploads/{collection_id}/{doc.filename}"}
+                for doc in all_documents
+            ],
+            "collection_id": collection.chroma_collection_id,
+        })
+        for document in all_documents:
+            document.status = DocumentStatus.READY
+            session.add(document)
+    except Exception as e:
+        for document in all_documents:
+            document.status = DocumentStatus.FAILED
+            document.error_message = f"Error in ingesting and embedding to vector store: {e}"
+            session.add(document)
     await session.commit()
     for document in all_documents:
         await session.refresh(document)
