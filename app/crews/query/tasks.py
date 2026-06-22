@@ -2,6 +2,7 @@ from crewai import Task
 
 from app.crews.query.agents import (cross_reference_agent, gap_analyst_agent,
                                     retriever_agent, synthesizer_agent)
+from app.schemas.query import QueryAnswer
 
 retrieve_task = Task(
     description="Retrieve top-k relevant chunks from Chroma DB collection {collection_id} for the user question: {question}",
@@ -17,10 +18,17 @@ cross_reference_task = Task(
 )
 
 synthesize_task = Task(
-    description="Produce the final structured answer with citations for the question: {question}",
-    expected_output="A JSON object with answer (str) and citations (list of filename, chunk_index, relevance_score)",
+    description="Produce the final structured answer for the question: {question}. You MUST return ONLY a valid JSON object with no additional text, no markdown, no code blocks. Return exactly: {\"answer\": \"your answer here\", \"citations\": [{\"filename\": \"...\", \"chunk_index\": 0, \"relevance_score\": 0.0}]}",
+    expected_output="""A raw JSON string with no Markdown, no code blocks, just valid JSON in this exact format:
+{
+    "answer": "...",
+    "citations": [
+        {"filename": "...", "chunk_index": 0, "relevance_score": 0.0}
+    ]
+}""",
     agent=synthesizer_agent,
     context=[retrieve_task],
+    output_pydantic=QueryAnswer,
 )
 
 gap_analyst_task = Task(

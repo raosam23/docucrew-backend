@@ -30,3 +30,8 @@ class QueryHistoryResponse(BaseModel):
     answer: str = Field("The answer to the query")
     citations: Optional[List[Citations]] = Field(default=None, description="The citations for the query")
     created_at: datetime = Field(description="The time at which the query was asked")
+
+class QueryAnswer(BaseModel):
+    """Schema of what the AI is going to respond when a query is given"""
+    answer: str
+    citations: List[Citations] = []

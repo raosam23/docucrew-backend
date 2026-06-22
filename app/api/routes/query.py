@@ -7,12 +7,13 @@ from sqlmodel import select
 
 from app.core.security import get_current_user
 from app.crews.query.crew import query_crew
+from app.crews.query.tasks import synthesize_task
 from app.db.database import get_session
 from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus
 from app.models.query_history import QueryHistory
 from app.models.user import User
-from app.schemas.query import QueryHistoryResponse, QueryRequest, QueryResponse
+from app.schemas.query import QueryAnswer, QueryHistoryResponse, QueryRequest, QueryResponse
 
 router = APIRouter()
 
@@ -28,14 +29,17 @@ async def query_collection(collection_id: UUID, request: QueryRequest, user: Use
         if document.status != DocumentStatus.READY:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Document '{document.filename}' is not ready (status: {document.status})")
 
-    response = query_crew.kickoff(inputs={"question": request.question, "collection_id": str(collection_id)})
+    query_crew.kickoff(inputs={"question": request.question, "collection_id": collections.chroma_collection_id})
+    structured: QueryAnswer = synthesize_task.output.pydantic
+    answer = structured.answer
+    citations = [c.model_dump() for c in structured.citations]
 
     history = QueryHistory(
         collection_id=collection_id,
         user_id=user.id,
         question=request.question,
-        answer=response.raw,
-        citations=[],
+        answer=answer,
+        citations=citations,
     )
 
     session.add(history)
@@ -44,7 +48,7 @@ async def query_collection(collection_id: UUID, request: QueryRequest, user: Use
 
     response = QueryResponse(
         answer=history.answer,
-        citations = [],
+        citations = history.citations,
         query_id=history.id
     )
 
