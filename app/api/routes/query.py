@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import desc, select
 
 from app.core.security import get_current_user
 from app.crews.query.crew import query_crew
@@ -28,8 +28,12 @@ async def query_collection(collection_id: UUID, request: QueryRequest, user: Use
     for document in documents:
         if document.status != DocumentStatus.READY:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Document '{document.filename}' is not ready (status: {document.status})")
-
-    query_crew.kickoff(inputs={"question": request.question, "collection_id": collections.chroma_collection_id})
+    query_history_response = await session.execute(select(QueryHistory).where(QueryHistory.collection_id == collection_id).order_by(desc(QueryHistory.created_at)).limit(5))
+    query_history = query_history_response.scalars().all()
+    chat_history = ""
+    for item in query_history:
+        chat_history += f"\n\nQuestion: {item.question}\nAnswer: {item.answer}"
+    query_crew.kickoff(inputs={"question": request.question, "collection_id": collections.chroma_collection_id, "chat_history": chat_history})
     structured: QueryAnswer = synthesize_task.output.pydantic
     answer = structured.answer
     citations = [c.model_dump() for c in structured.citations]

@@ -5,7 +5,7 @@ from app.crews.query.agents import (cross_reference_agent, gap_analyst_agent,
 from app.schemas.query import QueryAnswer
 
 retrieve_task = Task(
-    description="Retrieve top-k relevant chunks from Chroma DB collection {collection_id} for the user question: {question}",
+    description="Retrieve top-k relevant chunks from Chroma DB collection {collection_id} for the user question: {question}. Each chunk has metadata containing: doc_id, filename, file_type, chunk_index, page_number, collection_id. Always extract and pass the 'filename' field from metadata for use in citations. Here is the last 5 conversation for your reference: {chat_history}",
     expected_output="A list of relevent chunks with text, metadata and distance score",
     agent=retriever_agent
 )
@@ -18,7 +18,7 @@ cross_reference_task = Task(
 )
 
 synthesize_task = Task(
-    description="Produce the final structured answer for the question: {question}. You MUST return ONLY a valid JSON object with no additional text, no markdown, no code blocks. Return exactly: {\"answer\": \"your answer here\", \"citations\": [{\"filename\": \"...\", \"chunk_index\": 0, \"relevance_score\": 0.0}]}",
+    description="Produce the final structured answer for the question: {question}. You MUST return ONLY a valid JSON object with no additional text, no markdown, no code blocks. The 'filename' in citations MUST be the exact filename from the retrieved chunk metadata, do NOT use placeholders like '...' or made up names. Return exactly: {\"answer\": \"your answer here\", \"citations\": [{\"filename\": \"exact filename from metadata\", \"chunk_index\": 0, \"relevance_score\": 0.0}]} Here is the last 5 conversation for your reference: {chat_history}",
     expected_output="""A raw JSON string with no Markdown, no code blocks, just valid JSON in this exact format:
 {
     "answer": "...",
