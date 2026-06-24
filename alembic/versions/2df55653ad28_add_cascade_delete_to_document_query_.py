@@ -7,7 +7,7 @@ Create Date: 2026-06-21 01:13:56.115266
 """
 from typing import Sequence, Union
 
-import sqlalchemy as sa # noqa: F401
+import sqlalchemy as sa  # noqa: F401
 
 from alembic import op
 

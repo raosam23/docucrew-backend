@@ -1,4 +1,4 @@
-from crewai import LLM, Crew, Process, Agent
+from crewai import LLM, Agent, Crew, Process
 
 from app.core.config import settings
 from app.crews.query.agents import (cross_reference_agent, gap_analyst_agent,

@@ -13,7 +13,8 @@ from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus
 from app.models.query_history import QueryHistory
 from app.models.user import User
-from app.schemas.query import QueryAnswer, QueryHistoryResponse, QueryRequest, QueryResponse
+from app.schemas.query import (QueryAnswer, QueryHistoryResponse, QueryRequest,
+                               QueryResponse)
 
 router = APIRouter()
 
