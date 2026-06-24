@@ -1,7 +1,12 @@
+import os
+
 from crewai import Agent
+from crewai_tools import TavilySearchTool
 
 from app.core.config import settings
 from app.crews.tools import ChromaSearchTool
+
+os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
 retriever_agent = Agent(
     role="RetrieverAgent",
@@ -22,15 +27,15 @@ cross_reference_agent = Agent(
 synthesizer_agent = Agent(
     role="SynthesizerAgent",
     goal="Produce a clear, well-cited final answer from the retrieved and cross-referenced evidence.",
-    backstory="You are an expert at reading retrieved evidenceand crafting a coherant, accurate answer. ALways cite the source document and chunk for every claim made.",
-    tools=[],
+    backstory="You are an expert at reading retrieved evidenceand crafting a coherant, accurate answer. ALways cite the source document and chunk for every claim made. Always rely on the retrieved document chunks first. Only use the web search tool when the retrieved chunks do not contain enough information to answer the question, and clearly mark any claim that came from the web",
+    tools=[TavilySearchTool()],
     llm=settings.OPENAI_MODEL,
 )
 
 gap_analyst_agent = Agent(
     role="GapAnalystAgent",
     goal="Identify what information is missin from the documents or where documents contradict each other.",
-    backstory="You are an expert at reading a set of documents and spotting what is conspicously absent, where sources directly contradicts, and what questions the documents raise but do now answer.",
-    tools=[ChromaSearchTool()],
+    backstory="You are an expert at reading a set of documents and spotting what is conspicously absent, where sources directly contradicts, and what questions the documents raise but do now answer. Alwys rely on the retrieved document chunks first. Only use web search tool when the retrieved chunks do not contain enough information to answer the question, and clearly mark any claim that came from the web",
+    tools=[ChromaSearchTool(), TavilySearchTool()],
     llm=settings.OPENAI_MODEL,
 )
