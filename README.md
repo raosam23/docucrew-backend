@@ -19,7 +19,7 @@ Upload documents, ask questions, and get cited answers synthesized across your e
 
 ## What it does
 
-A user uploads a set of documents (PDF, DOCX, TXT, MD). The **Ingestion Crew** parses, chunks, and embeds them into ChromaDB. On every question, a hierarchical **Query Crew** — managed by an LLM — retrieves the most relevant chunks, cross-references them, detects gaps, and synthesizes a clear, **cited** answer. The last 5 Q&A pairs are fed back as context, so the chat remembers.
+A user uploads a set of documents (PDF, DOCX, TXT, MD). The **Ingestion Crew** parses, chunks, and embeds them into ChromaDB. On every question, a hierarchical **Query Crew** — managed by an LLM — retrieves the most relevant chunks, cross-references them, detects gaps, and synthesizes a clear, **cited** answer. The last 5 Q&A pairs are fed back as context, so the chat remembers. When the documents fall short, the crew can fall back to a quick web search to fill the gap.
 
 ---
 
@@ -35,7 +35,7 @@ source .venv/bin/activate
 uv sync
 
 # 3. Configure environment — copy and fill in your keys
-cp .env.example .env        # add OPENAI_API_KEY, DATABASE_URL, SECRET_KEY, ...
+cp .env.example .env        # add OPENAI_API_KEY, DATABASE_URL, SECRET_KEY, TAVILY_API_KEY, ...
 
 # 4. Run migrations
 uv run alembic upgrade head
