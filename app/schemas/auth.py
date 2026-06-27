@@ -23,8 +23,3 @@ class UserResponse(BaseModel):
     email: str = Field(description="The email of the user")
     name: Optional[str] = Field(default=None, description="The name of the user")
     created_at: datetime = Field(description="The time at which the user was created")
-
-class LoginResponse(BaseModel):
-    """Schema of what the API returns after login"""
-    access_token: str = Field(description="The access token")
-    token_type: str = Field(description="The type of token")

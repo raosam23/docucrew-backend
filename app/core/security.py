@@ -2,8 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 import bcrypt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Request, status
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -12,7 +11,6 @@ from app.core.config import settings
 from app.db.database import get_session
 from app.models.user import User
 
-http_bearer = HTTPBearer()
 
 def hash_password(password: str) -> str:
     """Helper function to hash a plain string password"""
@@ -30,12 +28,15 @@ def create_access_token(data: Dict[str, Any]) -> str:
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(http_bearer), session: AsyncSession = Depends(get_session)):
-    token = credentials.credentials
+async def get_current_user(request: Request, session: AsyncSession = Depends(get_session)):
+    """Get the current user from the request cookies using the access token"""
+    token = request.cookies.get("access_token")
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {str(exc)}") from exc
     email = payload.get("sub")
     if email is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")

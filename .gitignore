@@ -30,3 +30,6 @@ uploads/*
 
 # vs code files
 .vscode/
+
+# Bruno API collections
+bruno/
