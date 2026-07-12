@@ -33,3 +33,8 @@ uploads/*
 
 # Bruno API collections
 bruno/
+
+# Local curl / streaming debug artifacts
+cookies.txt
+streaming_query_logs.txt
+tmp_streaming_pdfs/
