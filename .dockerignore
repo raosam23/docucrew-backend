@@ -1,0 +1,11 @@
+.venv
+.env
+chroma_data/
+.git/
+__pycache__/
+.ruff_cache/
+.pytest_cache/
+uploads/
+bruno/
+*.md
+.DS_Store
