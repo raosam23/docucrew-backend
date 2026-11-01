@@ -13,8 +13,4 @@ class Collection(SQLModel, table=True):
     name: str
     description: Optional[str] = Field(default=None, nullable=True)
     chroma_collection_id: str
-    created_at: datetime = Field(sa_column=Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False
-    ))
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

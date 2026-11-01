@@ -11,17 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import desc, select
 
 from app.core.security import get_current_user
-from app.crews.query.crew import (ANSWER_STREAM_CITATION_MARKER,
-                                  ANSWER_STREAM_START_MARKER, build_query_crew)
+from app.crews.query.crew import ANSWER_STREAM_CITATION_MARKER, ANSWER_STREAM_START_MARKER, build_query_crew
 from app.db.database import async_session_maker, get_session
 from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus
 from app.models.query_history import QueryHistory
 from app.models.user import User
-from app.schemas.query import (QueryAnswer, QueryHistoryResponse, QueryRequest,
-                               QueryResponse)
+from app.schemas.query import QueryAnswer, QueryHistoryResponse, QueryRequest, QueryResponse
 
 router = APIRouter()
+
 
 def format_sse(event: str, data: Dict[str, Any]) -> str:
     """Format data for Server-Sent Events (SSE)
@@ -32,6 +31,7 @@ def format_sse(event: str, data: Dict[str, Any]) -> str:
         A string formatted for SSE
     """
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
 
 ANSWER_WRAPPERS = (
     ANSWER_STREAM_START_MARKER,
@@ -51,6 +51,7 @@ _CITATION_MARKER_LENGTH = len(ANSWER_STREAM_CITATION_MARKER)
 _REACT_HINTS = ("Action:", "Action Input:", "Thought:")
 _FALLBACK_TOKEN_SIZE = 8
 
+
 def strip_answer_wrappers(text: str) -> Tuple[bool, str]:
     """Remove CrewAI boilerplate wrappers.
     Args:
@@ -64,7 +65,7 @@ def strip_answer_wrappers(text: str) -> Tuple[bool, str]:
         matched = False
         for wrapper in sorted(ANSWER_WRAPPERS, key=len, reverse=True):
             if stripped.startswith(wrapper):
-                text=stripped[len(wrapper):]
+                text = stripped[len(wrapper) :]
                 found = True
                 matched = True
                 break
@@ -82,9 +83,10 @@ def strip_answer_wrappers(text: str) -> Tuple[bool, str]:
                 earliest = (index, len(wrapper))
         if earliest is None:
             break
-        text = text[earliest[0] + earliest[1]:]
+        text = text[earliest[0] + earliest[1] :]
         found = True
     return found, text.lstrip(" \t\r\n")
+
 
 def should_force_answer_start(pending: str) -> bool:
     """If synthesizer wrote proceed and no ReAct/tool markers, treat it as answer.
@@ -93,9 +95,10 @@ def should_force_answer_start(pending: str) -> bool:
     Returns:
         True if the pending text should be treated as an answer, False otherwise
     """
-    if len(pending.strip()) <  40:
+    if len(pending.strip()) < 40:
         return False
     return not any(hint in pending for hint in _REACT_HINTS)
+
 
 def iter_fallback_tokens(text: str) -> Generator[str, None, None]:
     """Split a late answer into small chunks so clients never see one giant token.
@@ -109,8 +112,9 @@ def iter_fallback_tokens(text: str) -> Generator[str, None, None]:
         return
     index = 0
     while index < len(text):
-        yield text[index: index + _FALLBACK_TOKEN_SIZE]
+        yield text[index : index + _FALLBACK_TOKEN_SIZE]
         index += _FALLBACK_TOKEN_SIZE
+
 
 def clean_stream_answer(answer: str) -> str:
     """Clean a stream answer by removing boilerplate wrappers.
@@ -125,6 +129,7 @@ def clean_stream_answer(answer: str) -> str:
         answer = answer[:citation_index]
     return answer.strip()
 
+
 def parse_stream_citations(citation_text: str) -> List[Dict[str, Any]]:
     citation_text = citation_text.strip()
     if not citation_text:
@@ -136,15 +141,15 @@ def parse_stream_citations(citation_text: str) -> List[Dict[str, Any]]:
         bracket = citation_text.find("[")
         if bracket < 0:
             return []
-        
+
         try:
             parsed, _ = json.JSONDecoder().raw_decode(citation_text[bracket:])
         except JSONDecodeError:
             return []
-        
+
     if not isinstance(parsed, list):
         return []
-    
+
     citations = []
     for item in parsed:
         if isinstance(item, dict) and "filename" in item:
@@ -152,10 +157,11 @@ def parse_stream_citations(citation_text: str) -> List[Dict[str, Any]]:
                 {
                     "filename": item.get("filename"),
                     "chunk_index": item.get("chunk_index", 0),
-                    "relevance_score": item.get("relevance_score", 0.0)
+                    "relevance_score": item.get("relevance_score", 0.0),
                 }
             )
     return citations
+
 
 async def save_query_history(
     collection_id: UUID,
@@ -175,11 +181,19 @@ async def save_query_history(
         session.add(history)
         await session.commit()
         await session.refresh(history)
-        return history 
+        return history
+
 
 @router.post("/{collection_id}/query", status_code=status.HTTP_200_OK, response_model=QueryResponse)
-async def query_collection(collection_id: UUID, request: QueryRequest, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
-    response = await session.execute(select(Collection).where(Collection.id == collection_id,Collection.user_id == user.id))
+async def query_collection(
+    collection_id: UUID,
+    request: QueryRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    response = await session.execute(
+        select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id)
+    )
     collections = response.scalar_one_or_none()
     if not collections:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collections not found")
@@ -187,14 +201,28 @@ async def query_collection(collection_id: UUID, request: QueryRequest, user: Use
     documents = documents_response.scalars().all()
     for document in documents:
         if document.status != DocumentStatus.READY:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Document '{document.filename}' is not ready (status: {document.status})")
-    query_history_response = await session.execute(select(QueryHistory).where(QueryHistory.collection_id == collection_id).order_by(desc(QueryHistory.created_at)).limit(5))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Document '{document.filename}' is not ready (status: {document.status})",
+            )
+    query_history_response = await session.execute(
+        select(QueryHistory)
+        .where(QueryHistory.collection_id == collection_id)
+        .order_by(desc(QueryHistory.created_at))
+        .limit(5)
+    )
     query_history = query_history_response.scalars().all()
     chat_history = ""
     for item in query_history:
         chat_history += f"\n\nQuestion: {item.question}\nAnswer: {item.answer}"
     query_crew, synthesize_task = build_query_crew()
-    query_crew.kickoff(inputs={"question": request.question, "collection_id": collections.chroma_collection_id, "chat_history": chat_history})
+    query_crew.kickoff(
+        inputs={
+            "question": request.question,
+            "collection_id": collections.chroma_collection_id,
+            "chat_history": chat_history,
+        }
+    )
     task_output = synthesize_task.output
     if task_output is None or task_output.pydantic is None:
         raise HTTPException(
@@ -217,24 +245,25 @@ async def query_collection(collection_id: UUID, request: QueryRequest, user: Use
     await session.commit()
     await session.refresh(history)
 
-    response = QueryResponse(
-        answer=history.answer,
-        citations = history.citations,
-        query_id=history.id
-    )
+    response = QueryResponse(answer=history.answer, citations=history.citations, query_id=history.id)
 
     return response
 
 
 @router.get("/{collection_id}/history", status_code=status.HTTP_200_OK, response_model=List[QueryHistoryResponse])
-async def get_query_history(collection_id: UUID, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
-    collection_response = await session.execute(select(Collection).where(Collection.id==collection_id, Collection.user_id == user.id))
+async def get_query_history(
+    collection_id: UUID, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)
+):
+    collection_response = await session.execute(
+        select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id)
+    )
     collection = collection_response.scalar_one_or_none()
     if not collection:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
     history_response = await session.execute(select(QueryHistory).where(QueryHistory.collection_id == collection_id))
     histories = history_response.scalars().all()
     return [QueryHistoryResponse.model_validate(history) for history in histories]
+
 
 @router.post("/{collection_id}/query/stream", status_code=status.HTTP_200_OK)
 async def stream_query_collection(
@@ -255,9 +284,7 @@ async def stream_query_collection(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Collection not found",
         )
-    documents_response = await session.execute(
-        select(Document).where(Document.collection_id == collection_id)
-    )
+    documents_response = await session.execute(select(Document).where(Document.collection_id == collection_id))
     documents = documents_response.scalars().all()
     for document in documents:
         if document.status != DocumentStatus.READY:
@@ -342,10 +369,7 @@ async def stream_query_collection(
                     pending = pending.lstrip(" \t\r\n")
                     if not pending:
                         continue
-                    if any(
-                        wrapper.startswith(pending) and pending != wrapper
-                        for wrapper in ANSWER_WRAPPERS
-                    ):
+                    if any(wrapper.startswith(pending) and pending != wrapper for wrapper in ANSWER_WRAPPERS):
                         continue
 
                 marker_index = pending.find(ANSWER_STREAM_CITATION_MARKER)
@@ -373,9 +397,7 @@ async def stream_query_collection(
                 fallback_answer = full_text
                 fallback_marker_index = fallback_answer.find(ANSWER_STREAM_CITATION_MARKER)
                 if fallback_marker_index >= 0:
-                    citation_text += fallback_answer[
-                        fallback_marker_index + _CITATION_MARKER_LENGTH :
-                    ]
+                    citation_text += fallback_answer[fallback_marker_index + _CITATION_MARKER_LENGTH :]
                     fallback_answer = fallback_answer[:fallback_marker_index]
                 fallback_answer = clean_stream_answer(fallback_answer)
                 for piece in iter_fallback_tokens(fallback_answer):

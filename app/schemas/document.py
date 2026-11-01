@@ -9,6 +9,7 @@ from app.models.document import DocumentStatus, FileType
 
 class DocumentResponse(BaseModel):
     """Schema of what the API returns for a document"""
+
     model_config = ConfigDict(from_attributes=True)
     id: UUID = Field(description="The unique ID of the document")
     collection_id: UUID = Field(description="The unique ID of the collection the document belongs to")

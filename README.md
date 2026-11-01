@@ -1,208 +1,164 @@
 # DocuCrew — Backend
 
-FastAPI API for **DocuCrew**, a multi-document intelligence platform powered by CrewAI and RAG.
+[![CI](https://github.com/raosam23/docucrew-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/raosam23/docucrew-backend/actions/workflows/ci.yml)
 
-Users register and log in (JWT in an **httpOnly cookie**), create collections, upload documents (PDF, DOCX, TXT, MD), and ask questions. An **Ingestion Crew** parses and embeds files into **ChromaDB**. A **Query Crew** retrieves, cross-references, synthesizes cited answers, and can flag gaps. Conversation context comes from the last 5 Q&A pairs stored in PostgreSQL.
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![CrewAI](https://img.shields.io/badge/CrewAI-FF5A50?logo=crewai&logoColor=white)](https://docs.crewai.com/)
+[![OpenAI](https://img.shields.io/badge/OpenAI-111111?logo=openai&logoColor=white)](https://platform.openai.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![SQLModel](https://img.shields.io/badge/SQLModel-7e56c2)](https://sqlmodel.tiangolo.com/)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-1F2937)](https://www.trychroma.com/)
+[![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white)](https://docs.pydantic.dev/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+
+[![uv](https://img.shields.io/badge/uv-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://docs.astral.sh/ruff/)
+[![pytest](https://img.shields.io/badge/pytest-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+
+FastAPI backend for [DocuCrew](https://github.com/raosam23/docucrew-frontend), a multi-document workspace. A user registers, keeps documents in collections, and asks questions in plain text. An ingestion crew reads each file and stores chunks in ChromaDB. A query crew retrieves those chunks and returns a cited answer, either as JSON or as a Server-Sent Event stream.
+
+The Next.js client lives in [raosam23/docucrew-frontend](https://github.com/raosam23/docucrew-frontend). Local Docker Compose for the two apps lives in [raosam23/docucrew-infra](https://github.com/raosam23/docucrew-infra). Postgres is external (Neon in the infra repo). This image does not start a database.
+
+## Status
+
+Auth, collections, upload, and both query modes are implemented and wired. Upload waits for the ingestion crew, then a question can be answered once every document in the collection is `ready`.
+
+A few declared pieces are not connected:
+
+- `REDIS_URL` is unused. Logout deletes the `access_token` cookie and does not blacklist the JWT.
+- `EMBEDDING_MODEL` is unused. `add_chunks` does not pass vectors. ChromaDB embeds with its default embedding function on add and query.
+- The document tagger runs during ingestion, and a gap analyst runs during query. Neither result is saved or returned. `chunk_count` stays null.
+- `app/services/collection_service.py` is empty. Collection rules live in the route handlers.
+- `app/crews/query/tasks.py` is an older task graph. `build_query_crew` builds its own tasks and does not import that module.
+
+## Features
+
+- Register, login, logout, and current-user. Passwords are bcrypt hashes. Login sets an httpOnly `access_token` cookie. Routes do not read `Authorization: Bearer`.
+- Collections per user. Each row stores a Chroma name, `col_{collection_id}`. Deleting a collection deletes that Chroma collection.
+- Multi-file upload for `.pdf`, `.docx`, `.txt`, and `.md`, up to 10MB each. The ingestion crew runs inside the request.
+- JSON query (`POST .../query`) from a hierarchical crew, and a streaming query (`POST .../query/stream`) from a sequential crew. The chat client uses the stream.
+- Query history stored in Postgres. The crews see the five newest question/answer pairs. The stream truncates each earlier answer to 500 characters.
+- Alembic migrations and a Docker image that starts the API.
+
+## Architecture
+
+Ingestion is a sequential CrewAI process. The chunk and tag tasks both take the parser task as context. Because the process is sequential, tagging still runs after chunking.
+
+```mermaid
+flowchart TD
+    upload[Document upload] --> parser[Document Parser]
+    parser --> chunker[Chunker and Embedder]
+    parser --> tagger[Document Analyst]
+    chunker --> chroma[(ChromaDB)]
+```
+
+| Agent | Tool | What the task asks for |
+| --- | --- | --- |
+| Document Parser | `FileReaderTool` | Plain text for each uploaded path |
+| Chunker and Embedder | `ChromaStoreTool` | Chunks written into the collection named `{collection_id}` |
+| Document Analyst | none | Domain, document type, and topics. The return value is not stored |
+
+Query has two builds of the same four agents.
+
+```mermaid
+flowchart TD
+    question[Question plus five recent answers] --> mode{build_query_crew}
+    mode -->|stream false| manager[Hierarchical crew and Manager]
+    mode -->|stream true| sequential[Sequential crew]
+    manager --> retriever[Retriever]
+    sequential --> retriever
+    retriever --> chroma[(ChromaDB)]
+    retriever --> cross[Cross reference]
+    cross --> synthesizer[Synthesizer]
+    retriever --> synthesizer
+    retriever --> gap[Gap analyst]
+    synthesizer --> response[Answer and citations]
+```
+
+| Agent | Tools | Returned to the client |
+| --- | --- | --- |
+| Retriever | `ChromaSearchTool` | No. Its chunks are context for the later tasks |
+| Cross reference | none | No. Context for the synthesizer |
+| Synthesizer | Tavily on the JSON crew, no tools on the stream crew | Yes. This is the only task the handlers read |
+| Gap analyst | `ChromaSearchTool` and Tavily | No. The task runs and the handler ignores it |
+| Manager | none, delegation on | Only the JSON crew. There is no manager when `stream=True` |
+
+The JSON synthesizer must return a `QueryAnswer` object (`answer` and `citations`). The stream synthesizer writes plain text, then the marker `__CITATIONS_JSON__` and a JSON array. The route forwards only `SynthesizerAgent` text tokens and parses that trailer into citations.
+
+### RAG pipeline
+
+Chunking is not a local splitter. The chunker agent is expected to call `ChromaStoreTool`, and that tool calls `add_chunks`. Retrieval is `ChromaSearchTool` calling `search`. Embeddings are whatever ChromaDB's default embedding function produces. The OpenAI key is for the chat agents, not for `EMBEDDING_MODEL`.
+
+```mermaid
+flowchart LR
+    file[PDF DOCX TXT or MD] --> reader[FileReaderTool]
+    reader --> parser[Document Parser]
+    parser --> chunker[Chunker and Embedder]
+    chunker --> store[ChromaStoreTool]
+    store --> chroma[(Chroma collection)]
+    question[User question] --> search[ChromaSearchTool]
+    chroma --> search
+    search --> retriever[Retriever]
+    retriever --> synthesizer[Synthesizer]
+    synthesizer --> answer[Cited answer]
+```
+
+Tavily is a fallback tool on the JSON synthesizer and on the gap analyst. The streaming synthesizer does not get it, so tool-call chunks are not mixed into the token stream.
+
+## Tech stack
 
 | Layer | Choice |
-| ----- | ------ |
-| Framework | FastAPI + Uvicorn |
-| Language | Python 3.12+ |
-| Package manager | **uv** |
-| Database | PostgreSQL (Neon / asyncpg, SSL required) |
-| ORM / migrations | SQLModel + Alembic |
-| Auth | JWT (`python-jose`) + bcrypt, cookie `access_token` |
-| Agents | CrewAI |
-| Vector store | ChromaDB (local, file-based) |
-| LLM | OpenAI (`OPENAI_MODEL`, default `gpt-4o-mini`) |
-| Web search | Tavily (`crewai_tools.TavilySearchTool`) |
+| --- | --- |
+| API | FastAPI, Uvicorn |
+| Agents | CrewAI, crewai-tools, Tavily |
+| Chat model | OpenAI, `OPENAI_MODEL`, default `gpt-4o-mini` |
+| Vectors | ChromaDB persistent client, cosine space |
+| Database | PostgreSQL through asyncpg, `ssl=require` |
+| ORM and migrations | SQLModel, SQLAlchemy asyncio, Alembic |
+| Auth | python-jose (JWT) and bcrypt, cookie `access_token` |
+| Documents | pypdf, python-docx |
+| Packaging | uv, Python 3.12+ |
 
----
-
-## What this app does
-
-1. **Auth** — Register / login / logout / me. Login sets an `access_token` httpOnly cookie (not Bearer headers, not localStorage).
-2. **Collections** — Create, list, get, delete document collections. Each maps to a ChromaDB collection named `col_{collection_id}`.
-3. **Documents** — Upload multiple files (max 10MB each; `.pdf`, `.docx`, `.txt`, `.md`). Upload runs the **Ingestion Crew** synchronously (parse → chunk/embed → tag), then returns document status (`ready` / `failed`).
-4. **Query** — Ask questions against a collection once all documents are `ready`.
-   - `POST .../query` — hierarchical Query Crew; JSON `{answer, citations, query_id}`.
-   - `POST .../query/stream` — sequential streaming crew; SSE (`status` / `token` / `done` / `error`). Prefer this for the chat UI.
-5. **History** — Past Q&A (and citations) per collection.
-
----
-
-## Folder structure
+## Project structure
 
 ```
-backend/
-├── app/
-│   ├── main.py                    # FastAPI app, CORS, mounts /api, GET /health
-│   ├── core/
-│   │   ├── config.py              # Pydantic settings from .env
-│   │   └── security.py            # bcrypt, JWT, get_current_user (cookie)
-│   ├── db/
-│   │   └── database.py            # async engine (ssl=require) + session factory
-│   ├── models/                    # SQLModel tables
-│   │   ├── user.py
-│   │   ├── collection.py
-│   │   ├── document.py
-│   │   └── query_history.py
-│   ├── schemas/                   # Request / response DTOs
-│   │   ├── auth.py
-│   │   ├── collection.py
-│   │   ├── document.py
-│   │   └── query.py
-│   ├── api/
-│   │   ├── router.py              # Mounts all routers under /api
-│   │   └── routes/
-│   │       ├── auth.py
-│   │       ├── collections.py
-│   │       ├── documents.py
-│   │       └── query.py           # Non-stream + SSE stream + history
-│   ├── services/
-│   │   ├── file_service.py        # Parse PDF / DOCX / TXT / MD
-│   │   └── chroma_service.py      # Chroma create / add / search / delete
-│   └── crews/
-│       ├── tools.py               # FileReaderTool, ChromaStoreTool, ChromaSearchTool
-│       ├── ingestion/             # Sequential: parse → chunk+embed → tag
-│       │   ├── agents.py
-│       │   ├── tasks.py
-│       │   └── crew.py
-│       └── query/                 # build_query_crew(stream=...)
-│           ├── agents.py          # Agent factories (+ Tavily)
-│           ├── tasks.py           # Legacy (unused by build_query_crew)
-│           └── crew.py            # Hierarchical (non-stream) / sequential (stream)
-├── alembic/                       # Migrations
-├── alembic.ini
-├── pyproject.toml
-├── uv.lock
-├── chroma_data/                   # Local Chroma persistence (gitignored)
-└── uploads/                       # Uploaded files (gitignored)
+app/
+├── main.py                 # FastAPI app, CORS, /api, GET /health
+├── api/
+│   ├── router.py           # Mounts the route modules
+│   └── routes/             # Auth, collections, documents, query
+├── core/                   # Settings and cookie JWT helpers
+├── db/                     # Async engine and session
+├── models/                 # SQLModel tables
+├── schemas/                # Pydantic request and response models
+├── services/
+│   ├── file_service.py     # PDF, DOCX, TXT, MD text
+│   ├── chroma_service.py   # Create, add, search, delete
+│   └── collection_service.py  # Empty
+└── crews/
+    ├── tools.py            # FileReader, ChromaStore, ChromaSearch
+    ├── ingestion/          # Sequential parse, chunk, tag
+    └── query/              # build_query_crew(stream=...)
+alembic/                    # Migrations
+tests/                      # Pytest suite, no network and no real keys
+.github/workflows/          # CI
 ```
 
-### Crews (high level)
+Uploaded files are written under `uploads/` and Chroma's files under `CHROMA_PERSIST_DIR` (default `./chroma_data`). Both are gitignored.
 
-| Crew | Process | When | Role |
-| ---- | ------- | ---- | ---- |
-| **Ingestion** | Sequential | On document upload | Parse files → chunk & embed into ChromaDB → tag (tags not persisted yet) |
-| **Query (non-stream)** | Hierarchical + explicit manager agent | `POST .../query` | Manager routes Retriever / CrossReference / GapAnalyst / Synthesizer; structured `QueryAnswer` |
-| **Query (stream)** | Sequential + `stream=True` | `POST .../query/stream` | Same agents in order; SSE forwards Synthesizer tokens only; citations via `__CITATIONS_JSON__` trailer |
+## Setup
 
----
-
-## API routes
-
-All app routes are under `/api`, except health. Protected routes require a valid **`access_token` httpOnly cookie** (set on login). Do not use `Authorization: Bearer`.
-
-### Root
-
-| Method | Path | Auth | Description |
-| ------ | ---- | ---- | ----------- |
-| `GET` | `/health` | No | Liveness check → `{"status":"ok"}` |
-
-### Auth — `/api/auth`
-
-| Method | Path | Auth | Description |
-| ------ | ---- | ---- | ----------- |
-| `POST` | `/api/auth/register` | No | Create account. Body: `{email, password, name?}`. Returns user. |
-| `POST` | `/api/auth/login` | No | Body: `{email, password}`. Sets `access_token` cookie; returns user. |
-| `POST` | `/api/auth/logout` | No | Clears `access_token` cookie. |
-| `GET` | `/api/auth/me` | Yes | Current user profile. |
-
-### Collections — `/api/collections`
-
-| Method | Path | Auth | Description |
-| ------ | ---- | ---- | ----------- |
-| `POST` | `/api/collections/` | Yes | Create collection. Body: `{name, description?}`. Sets `chroma_collection_id` to `col_{id}`. |
-| `GET` | `/api/collections/` | Yes | List collections for the current user. |
-| `GET` | `/api/collections/{id}` | Yes | Collection metadata only (no nested documents). |
-| `DELETE` | `/api/collections/{id}` | Yes | Delete collection (DB cascade + ChromaDB collection). |
-
-### Documents — `/api/collections/{id}/documents`
-
-| Method | Path | Auth | Description |
-| ------ | ---- | ---- | ----------- |
-| `POST` | `/api/collections/{id}/documents/` | Yes | Multipart upload (`files`). Runs Ingestion Crew synchronously. Returns document list with status / chunk info. |
-| `GET` | `/api/collections/{id}/documents` | Yes | List documents in the collection. |
-| `DELETE` | `/api/collections/{id}/documents/{doc_id}` | Yes | Delete one document (disk file + Chroma chunks by `doc_id` + DB row). Blocked while `processing`. |
-
-### Query — `/api/collections/{id}`
-
-| Method | Path | Auth | Description |
-| ------ | ---- | ---- | ----------- |
-| `POST` | `/api/collections/{id}/query` | Yes | Non-stream hierarchical crew. Body: `{question}`. Response: `{answer, citations, query_id}`. Blocked if any document is not `ready`. |
-| `POST` | `/api/collections/{id}/query/stream` | Yes | SSE stream (`text/event-stream`). Same body. Events: `status` → `token`* → `done` (or `error`). Saves history before `done`. |
-| `GET` | `/api/collections/{id}/history` | Yes | Past queries for this collection (`question`, `answer`, `citations`, `created_at`). |
-
-#### Stream events (`/query/stream`)
-
-| Event | Payload | Notes |
-| ----- | ------- | ----- |
-| `status` | `{"message":"started"}` | Stream began |
-| `token` | `{"content":"..."}` | Append fragments (Synthesizer text only) |
-| `done` | `{query_id, answer, citations, created_at}` | Authoritative final answer after DB save |
-| `error` | `{"message":"..."}` | Failure after the stream started |
-
-Pre-stream failures (auth, missing collection, docs not ready) return normal JSON HTTP errors (`401` / `404` / `400`), not SSE.
-
-Interactive docs: [http://localhost:8000/docs](http://localhost:8000/docs)
-
----
-
-## Installation
-
-### Prerequisites
-
-- Python **3.12+**
-- [uv](https://github.com/astral-sh/uv)
-- A PostgreSQL database (e.g. Neon) with SSL
-- OpenAI API key
-- Tavily API key (used by query agents)
-
-### Steps
+Requirements: Python 3.12+, [uv](https://docs.astral.sh/uv/getting-started/installation/), PostgreSQL that accepts SSL, an OpenAI API key, and a Tavily API key. The app reads `TAVILY_API_KEY` while importing the query agents, so the process will not start without it.
 
 ```bash
-cd backend
-
-uv venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+git clone https://github.com/raosam23/docucrew-backend.git
+cd docucrew-backend
 uv sync
+cp .env.example .env
 ```
 
-Create a `.env` file in `backend/` (there is no `.env.example` in the repo yet):
-
-```env
-APP_NAME=DocuCrew
-APP_ENV=development
-DEBUG=true
-
-DATABASE_URL=postgresql+asyncpg://user:password@host/docucrew?ssl=require
-
-SECRET_KEY=replace-me
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-SALT_ROUNDS=12
-
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
-
-CHROMA_PERSIST_DIR=./chroma_data
-
-ALLOWED_ORIGINS=["http://localhost:3000"]
-
-REDIS_URL=redis://localhost:6379
-
-TAVILY_API_KEY=tvly-...
-```
-
-Notes:
-
-- `DATABASE_URL` must use the `postgresql+asyncpg://` scheme. The engine always connects with `ssl=require`.
-- `REDIS_URL` is declared in config but Redis JWT blacklisting is **not implemented** yet (logout only deletes the cookie).
-- `ALLOWED_ORIGINS` must list the frontend origin explicitly (`allow_credentials=True`; `*` is not used).
-
-Run migrations and start the server:
+Fill in `DATABASE_URL`, `SECRET_KEY`, `OPENAI_API_KEY`, and `TAVILY_API_KEY`. Then apply migrations and start the API:
 
 ```bash
 uv run alembic upgrade head
@@ -210,9 +166,153 @@ uv run uvicorn app.main:app --reload
 ```
 
 | URL | Purpose |
-| --- | ------- |
+| --- | --- |
 | http://localhost:8000 | API |
 | http://localhost:8000/docs | Swagger UI |
 | http://localhost:8000/health | Health check |
 
-Chroma data is stored under `backend/chroma_data/` (gitignored). Uploaded files live under `backend/uploads/`.
+CORS allows `http://localhost:3000` by default, with credentials, so the browser can send the cookie. `ALLOWED_ORIGINS` must list origins explicitly.
+
+The Docker image installs production dependencies and starts Uvicorn. It does not run Alembic. Apply migrations first, or use [docucrew-infra](https://github.com/raosam23/docucrew-infra), whose Compose file runs migrations and then the API.
+
+```bash
+docker build -t docucrew-backend .
+docker run --env-file .env -p 8000:8000 docucrew-backend
+```
+
+### Environment variables
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `APP_NAME` | No | `DocuCrew` | Settings name |
+| `APP_ENV` | Yes | | Environment name |
+| `DEBUG` | Yes | | SQLAlchemy SQL echo and FastAPI debug |
+| `DATABASE_URL` | Yes | | Async URL, `postgresql+asyncpg://...`. The engine also sets `ssl=require` |
+| `SECRET_KEY` | Yes | | JWT signing secret |
+| `ALGORITHM` | No | `HS256` | JWT algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | `60` | Cookie `Max-Age` and JWT lifetime |
+| `SALT_ROUNDS` | No | `12` | bcrypt cost |
+| `OPENAI_API_KEY` | Yes | | Key for the CrewAI agents |
+| `OPENAI_MODEL` | No | `gpt-4o-mini` | Chat model passed to each agent |
+| `EMBEDDING_MODEL` | No | `text-embedding-3-small` | Stored on settings. The Chroma service does not read it |
+| `CHROMA_PERSIST_DIR` | No | `./chroma_data` | Chroma persistent path |
+| `ALLOWED_ORIGINS` | No | `["http://localhost:3000"]` | JSON list of CORS origins |
+| `REDIS_URL` | No | `redis://localhost:6379` | Stored on settings. Unused |
+| `TAVILY_API_KEY` | Yes | | Web search tool. Required at import |
+
+## API
+
+REST routes are under `/api`. Protected routes require the `access_token` cookie set by login. A missing or invalid cookie returns `401`. Logout, register, login, and `GET /health` are public.
+
+The cookie is httpOnly and `SameSite=lax`. `secure` is false so local HTTP can send it.
+
+### Health
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/health` | No | Returns `{"status": "ok"}` |
+
+### Authentication — `/api/auth`
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/api/auth/register` | No | Body `{email, password, name?}`. `201` and the user. `400` if the email exists |
+| `POST` | `/api/auth/login` | No | Body `{email, password}`. Sets `access_token` and returns the user. `401` for a bad email or password |
+| `POST` | `/api/auth/logout` | No | Deletes the cookie. Returns `{"message": "Logged out successfully"}` |
+| `GET` | `/api/auth/me` | Yes | Current user |
+
+The user payload is `{id, email, name, created_at}`. The password hash is not returned.
+
+### Collections — `/api/collections`
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/api/collections/` | Yes | Body `{name, description?}`. `chroma_collection_id` is `col_{id}` |
+| `GET` | `/api/collections/` | Yes | Collections for the current user |
+| `GET` | `/api/collections/{collection_id}` | Yes | One collection. `404` if it is missing or owned by someone else |
+| `DELETE` | `/api/collections/{collection_id}` | Yes | Deletes the row and the Chroma collection. `204` |
+
+### Documents — `/api/collections/{collection_id}/documents`
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/api/collections/{collection_id}/documents/` | Yes | Multipart field `files`, repeated. Runs the ingestion crew, then returns the documents |
+| `GET` | `/api/collections/{collection_id}/documents` | Yes | Documents in the collection |
+| `DELETE` | `/api/collections/{collection_id}/documents/{document_id}` | Yes | Deletes the file, Chroma chunks for that `doc_id`, and the row. `400` while `processing` |
+
+An unknown extension returns `400`. A file larger than 10MB returns `400`. A missing collection returns `404`. If the crew raises, the uploaded documents are saved with status `failed` and `error_message` set. A successful crew run sets status `ready`. `chunk_count` is not filled in.
+
+Document status is `pending`, `processing`, `ready`, or `failed`. File type is `pdf`, `docx`, `txt`, or `md`.
+
+### Query — `/api/collections/{collection_id}`
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/api/collections/{collection_id}/query` | Yes | Body `{question}`. Hierarchical crew. Returns `{answer, citations, query_id}` |
+| `POST` | `/api/collections/{collection_id}/query/stream` | Yes | Same body. `text/event-stream` |
+| `GET` | `/api/collections/{collection_id}/history` | Yes | Saved questions for the collection |
+
+Both query routes return `400` if any document is not `ready`. They do not require the collection to contain a document. A missing collection returns `404`. If the JSON synthesizer does not produce a `QueryAnswer`, the route returns `500` with `Failed to synthesize answer`.
+
+A citation is `{filename, chunk_index, relevance_score}`.
+
+#### Stream events
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `status` | `{"message": "started"}` | The stream opened |
+| `token` | `{"content": "..."}` | A piece of synthesizer text |
+| `done` | `{query_id, answer, citations, created_at}` | History was saved. This payload is the answer to keep |
+| `error` | `{"message": "..."}` | The crew or the save failed after the stream opened |
+
+Auth failures, a missing collection, and documents that are not `ready` are normal JSON errors. They are not SSE events.
+
+## Testing
+
+The suite is pytest. It does not need Postgres, Chroma, OpenAI, Tavily, or any other network service. `tests/bootstrap.py` sets dummy environment variables when they are not already present, and CI sets the same placeholders. CrewAI telemetry is disabled in that bootstrap.
+
+```bash
+uv sync
+uv run pytest
+uv run pytest --cov=app --cov-report=term-missing
+uv run ruff check . --exclude alembic/ --select=E,F --ignore=E501,F821
+uv run pyright
+```
+
+| Area | What is covered |
+| --- | --- |
+| `tests/test_security.py` | bcrypt hashes and JWT create, expiry, tamper, missing subject, and unknown user |
+| `tests/test_schemas.py` | Auth, collection, document, and query validation |
+| `tests/test_config_and_database.py` | Settings defaults and the session / `init_db` helpers |
+| `tests/test_file_service.py` | TXT, Markdown, DOCX, PDF, and unsupported types |
+| `tests/test_chroma_service.py` | Add, search, and delete against a fake Chroma client |
+| `tests/test_crew_tools.py` | File reader, store, and search tools |
+| `tests/test_ingestion_crew.py` | Sequential agents, tools, and task context |
+| `tests/test_query_crew.py` | Hierarchical and streaming crews, plus the legacy task module |
+| `tests/test_auth_routes.py` | Register, login cookie, logout, `/me`, and `401` on protected routes |
+| `tests/test_collection_routes.py` | Create, list, get, delete |
+| `tests/test_document_routes.py` | Upload, ingestion failure, type and size checks, list, delete |
+| `tests/test_query_routes.py` | JSON query, history, documents that are not ready |
+| `tests/test_query_stream.py` | SSE parsing, citation trailers, and stream errors |
+| `tests/test_main.py` | `GET /health` and CORS |
+
+Mocking:
+
+| Dependency | How |
+| --- | --- |
+| Database | `AsyncMock` session. `add` stays synchronous, matching SQLAlchemy |
+| FastAPI dependencies | `app.dependency_overrides` for `get_session` and `get_current_user` |
+| CrewAI / OpenAI / Tavily | `kickoff` is a `MagicMock`. Crew tests only inspect agents, tasks, and tools |
+| Chroma and embeddings | The Chroma client is replaced. Search and add never download a model |
+| Files | Upload tests run in a temporary working directory. PDF pages are a scripted `PdfReader` |
+| Stream history | `async_session_maker` returns the mock session. `save_query_history` still runs |
+
+## CI
+
+`.github/workflows/ci.yml` runs on pushes and pull requests to `main`. Lint, type checking, and tests are separate jobs, so a failure in one is visible on its own. Each job installs dependencies with `uv sync --frozen` (the dev group is included by default). Production Docker still uses `uv sync --frozen --no-dev`.
+
+| Job | What it runs |
+| --- | --- |
+| Lint | `ruff check` for pycodestyle and pyflakes (`E501` and `F821` ignored, Alembic excluded). `ruff format --check` is allowed to fail without failing the job. |
+| Type Check | `pyright`, allowed to fail without failing the job. |
+| Test | `pytest` with coverage of `app`. The job fails if coverage drops below 95%. |

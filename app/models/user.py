@@ -12,8 +12,4 @@ class User(SQLModel, table=True):
     email: str = Field(unique=True, nullable=False, index=True)
     password_hash: str
     name: Optional[str] = Field(default=None)
-    created_at: datetime = Field(sa_column=Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False
-    ))
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

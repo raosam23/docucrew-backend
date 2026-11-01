@@ -8,6 +8,7 @@ from app.crews.tools import ChromaSearchTool
 
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
+
 def create_retriever_agent() -> Agent:
     """Create a retriever agent.
     Returns:
@@ -18,8 +19,9 @@ def create_retriever_agent() -> Agent:
         goal="Search the vector store for the most relevant chunks related to the user's question.",
         backstory="You are an expert at semantic search. Given a question, you retrieve the top-k most relevant document chunks from the vector store, alone with their source metata and relevance scores.",
         tools=[ChromaSearchTool()],
-        llm=settings.OPENAI_MODEL
+        llm=settings.OPENAI_MODEL,
     )
+
 
 def create_cross_reference_agent() -> Agent:
     """Create a cross-reference agent."""
@@ -31,7 +33,8 @@ def create_cross_reference_agent() -> Agent:
         llm=settings.OPENAI_MODEL,
     )
 
-def create_synthesizer_agent(include_web_search:bool = True) -> Agent:
+
+def create_synthesizer_agent(include_web_search: bool = True) -> Agent:
     """Create a synthesizer agent.
     Args:
         include_web_search: Whether to include the web search tool in the agent's tools.
@@ -47,6 +50,7 @@ def create_synthesizer_agent(include_web_search:bool = True) -> Agent:
         llm=settings.OPENAI_MODEL,
     )
 
+
 def create_gap_analyst_agent() -> Agent:
     """Create a gap analyst agent.
     Returns:
@@ -59,6 +63,7 @@ def create_gap_analyst_agent() -> Agent:
         tools=[ChromaSearchTool(), TavilySearchTool()],
         llm=settings.OPENAI_MODEL,
     )
+
 
 retriever_agent = create_retriever_agent()
 cross_reference_agent = create_cross_reference_agent()
