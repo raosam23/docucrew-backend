@@ -3,10 +3,12 @@ from typing import Tuple
 from crewai import LLM, Agent, Crew, Process, Task
 
 from app.core.config import settings
-from app.crews.query.agents import (create_cross_reference_agent,
-                                    create_gap_analyst_agent,
-                                    create_retriever_agent,
-                                    create_synthesizer_agent)
+from app.crews.query.agents import (
+    create_cross_reference_agent,
+    create_gap_analyst_agent,
+    create_retriever_agent,
+    create_synthesizer_agent,
+)
 from app.schemas.query import QueryAnswer
 
 ANSWER_STREAM_START_MARKER = "FINAL_ANSWER_START"
@@ -94,7 +96,7 @@ def build_query_crew(stream: bool = False) -> Tuple[Crew, Task]:
         )
     else:
         synthesize_task = Task(
-            description="Produce the final structured answer for the question: {question}. You MUST return ONLY a valid JSON object with no additional text, no markdown, no code blocks. The 'filename' in citations MUST be the exact filename from the retrieved chunk metadata, do NOT use placeholders like '...' or made up names. Return exactly: {\"answer\": \"your answer here\", \"citations\": [{\"filename\": \"exact filename from metadata\", \"chunk_index\": 0, \"relevance_score\": 0.0}]} Here is the last 5 conversation for your reference: {chat_history}",
+            description='Produce the final structured answer for the question: {question}. You MUST return ONLY a valid JSON object with no additional text, no markdown, no code blocks. The \'filename\' in citations MUST be the exact filename from the retrieved chunk metadata, do NOT use placeholders like \'...\' or made up names. Return exactly: {"answer": "your answer here", "citations": [{"filename": "exact filename from metadata", "chunk_index": 0, "relevance_score": 0.0}]} Here is the last 5 conversation for your reference: {chat_history}',
             expected_output="""A raw JSON string with no Markdown, no code blocks, just valid JSON in this exact format:
 {
     "answer": "...",

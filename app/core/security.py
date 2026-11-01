@@ -16,9 +16,11 @@ def hash_password(password: str) -> str:
     """Helper function to hash a plain string password"""
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=settings.SALT_ROUNDS)).decode("utf-8")
 
+
 def verify_password(password: str, hashed_password: str) -> bool:
     """Helper function to verify a plain string password against a hashed password"""
     return bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
+
 
 def create_access_token(data: Dict[str, Any]) -> str:
     """Takes the data, signs it with SECRET_KEY, sets an expiry, and return the token string"""
@@ -27,6 +29,7 @@ def create_access_token(data: Dict[str, Any]) -> str:
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
 
 async def get_current_user(request: Request, session: AsyncSession = Depends(get_session)):
     """Get the current user from the request cookies using the access token"""

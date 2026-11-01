@@ -17,15 +17,18 @@ from app.services.chroma_service import delete_chunks_by_doc_id
 
 router = APIRouter()
 
+
 @router.post("/{collection_id}/documents/", response_model=List[DocumentResponse])
 async def upload_documents(
     collection_id: UUID,
     files: List[UploadFile] = File(...),
     user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """Endpoint that uploads multiple documents to a collection"""
-    response = await session.execute(select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id))
+    response = await session.execute(
+        select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id)
+    )
     collection = response.scalar_one_or_none()
     if not collection:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
@@ -54,13 +57,15 @@ async def upload_documents(
         session.add(document)
     await session.commit()
     try:
-        ingestion_crew.kickoff(inputs={
-            "files": [
-                {"doc_id": str(doc.id), "file_path": f"./uploads/{collection_id}/{doc.filename}"}
-                for doc in all_documents
-            ],
-            "collection_id": collection.chroma_collection_id,
-        })
+        ingestion_crew.kickoff(
+            inputs={
+                "files": [
+                    {"doc_id": str(doc.id), "file_path": f"./uploads/{collection_id}/{doc.filename}"}
+                    for doc in all_documents
+                ],
+                "collection_id": collection.chroma_collection_id,
+            }
+        )
         for document in all_documents:
             document.status = DocumentStatus.READY
             session.add(document)
@@ -72,13 +77,18 @@ async def upload_documents(
     await session.commit()
     for document in all_documents:
         await session.refresh(document)
-    
+
     return [DocumentResponse.model_validate(document) for document in all_documents]
 
+
 @router.get("/{collection_id}/documents", response_model=List[DocumentResponse], status_code=status.HTTP_200_OK)
-async def get_documents_by_collection_id(collection_id: UUID, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+async def get_documents_by_collection_id(
+    collection_id: UUID, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)
+):
     """Endpoint that retrieves all documents in a collection"""
-    response = await session.execute(select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id))
+    response = await session.execute(
+        select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id)
+    )
     collection = response.scalar_one_or_none()
     if not collection:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
@@ -86,13 +96,23 @@ async def get_documents_by_collection_id(collection_id: UUID, user: User = Depen
     documents = response.scalars().all()
     return [DocumentResponse.model_validate(document) for document in documents]
 
+
 @router.delete("/{collection_id}/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document_by_ids(collection_id: UUID, document_id: UUID, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
-    response = await session.execute(select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id))
+async def delete_document_by_ids(
+    collection_id: UUID,
+    document_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    response = await session.execute(
+        select(Collection).where(Collection.id == collection_id, Collection.user_id == user.id)
+    )
     collection = response.scalar_one_or_none()
     if not collection:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
-    response = await session.execute(select(Document).where(Document.id == document_id, Document.collection_id == collection_id))
+    response = await session.execute(
+        select(Document).where(Document.id == document_id, Document.collection_id == collection_id)
+    )
     document = response.scalar_one_or_none()
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
